@@ -1,2 +1,4 @@
-#Solar System Model
-#Created By Rafchan Sami
+# Solar System Model
+
+
+# Created By Rafchan Sami
