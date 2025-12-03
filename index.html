@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Solar System </title>
+    <!-- CSS ফ্রেমওয়ার্ক -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js লাইব্রেরি ৩ডি গ্রাফিক্সের জন্য -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- ক্যামেরা নিয়ন্ত্রণের জন্য OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        /* CSS কোড শুরু */
+        body {
+            margin: 0;
+            overflow: hidden; /* স্ক্রলিং বন্ধ করতে */
+            background-color: #000000; /* মহাকাশের মতো কালো ব্যাকগ্রাউন্ড */
+            font-family: 'Inter', sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #info-box {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            color: #ffffff;
+            text-align: center;
+            font-size: 16px;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            z-index: 10;
+        }
+        #info-box h1 {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+        #info-box p {
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        /* নতুন কন্ট্রোল প্যানেল স্টাইল */
+        #controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            color: white;
+            z-index: 10;
+        }
+        #controls-panel label {
+            white-space: nowrap;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        #speed-value {
+            min-width: 30px;
+            text-align: right;
+            font-weight: bold;
+            color: #ffaa00;
+        }
+        /* নতুন জুম নির্দেশনা */
+        .zoom-instruction {
+            font-size: 0.8rem;
+            color: #ccc;
+            padding-left: 10px;
+            border-left: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        #footer a {
+            color: #ffaa00;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        /* CSS কোড শেষ */
+    </style>
+</head>
+<body>
+    <!-- HTML স্ট্রাকচার শুরু -->
+    <div id="info-box">
+        <h1 class="text-yellow-400">Solar System</h1>
+        <p class="text-gray-300">ক্যামেরা নিয়ন্ত্রণ করতে মাউস টেনে ধরুন বা হুইল স্ক্রল করুন। স্পেস শিপ এখন সঠিকভাবে কক্ষপথে ঘুরছে।  ( Created By Rafchan Sami)</p>
+    </div>
+
+    <div id="controls-panel">
+        <!-- গতির কন্ট্রোল (Speed Control) -->
+        <label for="speed-slider">গতি নিয়ন্ত্রণ:</label>
+        <input type="range" id="speed-slider" min="0.1" max="3.0" value="1.0" step="0.05">
+        <span id="speed-value" class="w-8">1.0x</span>
+        
+        <!-- জুম নিয়ন্ত্রণ নির্দেশনা -->
+        <span class="zoom-instruction">জুম করতে মাউস হুইল (scroll) ব্যবহার করুন।</span>
+    </div>
+     <div id="footer">
+        Solar System Simulation | Developed with Three.js and Gemini API Guidance
+    </div>
+    <!-- HTML স্ট্রাকচার শেষ -->
+
+    <script>
+        // JavaScript কোড শুরু
+        // --- Firebase/Authentication globals (Not used in this simulation, but kept for context) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // -----------------------------------------------------------------------------------------
+
+        let simulationSpeed = 1.0; 
+        let shipTime = 0; // স্পেস শিপের গতিপথ নিয়ন্ত্রণের জন্য
+        
+        // --- ৩ডি সিন সেটআপ ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000000); 
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        // ক্যামেরাটিকে এখন বড় কক্ষপথ দেখতে পাওয়ার জন্য আরও দূরে সরিয়ে দেওয়া হলো
+        camera.position.set(0, 100, 200); 
+        controls.update();
+
+        const ambientLight = new THREE.AmbientLight(0x333333); 
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 2, 0); 
+        scene.add(pointLight);
+
+        // গ্রহের ডেটা (অভ্যন্তরীণ গ্রহের আকার বৃদ্ধি এবং সকল কক্ষপথের দূরত্ব বৃদ্ধি করা হয়েছে)
+        const planetData = [
+            // বুধ (Mercury): Size 1.0 -> 1.5. Distance 10 -> 12
+            { name: "বুধ (Mercury)", size: 1.5, distance: 12, color: 0x888888, speed: 0.072 },
+            // শুক্র (Venus): Size 1.6 -> 2.4. Distance 15 -> 18
+            { name: "শুক্র (Venus)", size: 2.4, distance: 18, color: 0xeed49d, speed: 0.052 },
+            // পৃথিবী (Earth): Size 2.0 -> 3.0. Distance 22 -> 26.4
+            { name: "পৃথিবী (Earth)", size: 3.0, distance: 26.4, color: 0x0077ff, speed: 0.043 },
+            // মঙ্গল (Mars): Size 1.4 -> 2.1. Distance 30 -> 36
+            { name: "মঙ্গল (Mars)", size: 2.1, distance: 36, color: 0xcc4400, speed: 0.036 },
+            // বৃহস্পতি (Jupiter): Size 7.0 (একই). Distance 60 -> 72
+            { name: "বৃহস্পতি (Jupiter)", size: 7.0, distance: 72, color: 0xc8aa6c, speed: 0.019 },
+            // শনি (Saturn): Size 6.0 (একই). Distance 90 -> 108. Ring size একই রাখা হয়েছে
+            { name: "শনি (Saturn)", size: 6.0, distance: 108, color: 0xe8e8c8, speed: 0.013, ring: { innerRadius: 8, outerRadius: 12, color: 0x998877 } }, 
+            // ইউরেনাস (Uranus): Size 4.0 (একই). Distance 120 -> 144
+            { name: "ইউরেনাস (Uranus)", size: 4.0, distance: 144, color: 0xaaffff, speed: 0.010 },
+            // নেপচুন (Neptune): Size 4.0 (একই). Distance 150 -> 180
+            { name: "নেপচুন (Neptune)", size: 4.0, distance: 180, color: 0x0000cc, speed: 0.007 }
+        ];
+        
+        // চাঁদের ডেটা (আকার নতুন পৃথিবীর আকারের সাথে সামঞ্জস্যপূর্ণ)
+        const moonData = {
+            size: 0.9, 
+            distance: 9.0, 
+            color: 0xaaaaaa, 
+            speed: 0.5 
+        };
+
+        const planets = [];
+        const planetGroups = [];
+        let earthGroup;
+        let moonGroup; 
+        let spaceShip;
+
+
+        // --- অতিরিক্ত অবজেক্ট তৈরি করার ফাংশন ---
+
+        function createPlanetLabel(text) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const fontSize = 32;
+            const padding = 10;
+
+            context.font = `Bold ${fontSize}px Inter`;
+            const metrics = context.measureText(text);
+            const textWidth = metrics.width;
+            const textHeight = fontSize;
+
+            canvas.width = textWidth + padding * 2;
+            canvas.height = textHeight + padding * 2;
+            
+            context.font = `Bold ${fontSize}px Inter`;
+            context.fillStyle = "rgba(0, 0, 0, 0.6)"; 
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            context.fillStyle = "white";
+            context.textAlign = "left";
+            context.textBaseline = "top";
+            context.fillText(text, padding, padding);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.minFilter = THREE.LinearFilter;
+
+            const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+            const sprite = new THREE.Sprite(material);
+
+            // লেবেলের স্কেল ঠিক রাখা
+            sprite.scale.set(canvas.width / 8, canvas.height / 8, 1);
+
+            return sprite;
+        }
+
+        /** তারাভরা ব্যাকগ্রাউন্ড যোগ করা */
+        function addStars() {
+            const starGeometry = new THREE.BufferGeometry();
+            const starCount = 5000;
+            const positions = [];
+
+            for (let i = 0; i < starCount; i++) {
+                // Random position within a large volume
+                const x = THREE.MathUtils.randFloatSpread(1000); 
+                const y = THREE.MathUtils.randFloatSpread(1000);
+                const z = THREE.MathUtils.randFloatSpread(1000);
+                positions.push(x, y, z);
+            }
+
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            
+            const starMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5 });
+            const stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+        }
+        
+        
+        /** সৌরজগতে স্পেস শিপ তৈরি করা (সংশোধিত) */
+        function createSpaceship() {
+            const shipGroup = new THREE.Object3D();
+            shipGroup.name = "SpaceShip";
+            
+            // ১. মূল দেহ (Cylinder) - Z অক্ষ বরাবর নির্দেশ করা
+            const mainBody = new THREE.Mesh(
+                new THREE.CylinderGeometry(1.5, 1.5, 6, 8),
+                new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
+            );
+            mainBody.rotation.x = Math.PI / 2; // XZ প্লেনে শুইয়ে দেওয়া
+            shipGroup.add(mainBody);
+
+            // ২. সামনের অংশ (Cone/Nose)
+            const nose = new THREE.Mesh(
+                new THREE.ConeGeometry(1.5, 3, 8),
+                new THREE.MeshLambertMaterial({ color: 0x5a5a5a })
+            );
+            nose.rotation.x = Math.PI / 2; // XZ প্লেনে শুইয়ে দেওয়া
+            nose.position.z = -4.5; // পিছনে স্থাপন (জাহাজ সামনের দিকে ঘুরবে)
+            shipGroup.add(nose);
+            
+            // ৩. ককপিট উইন্ডো (Cockpit Window) - সামনে স্থাপন
+            const windowMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.8, 16, 16),
+                new THREE.MeshLambertMaterial({ color: 0x00ccff })
+            );
+            windowMesh.position.z = 3; // সামনে স্থাপন
+            shipGroup.add(windowMesh);
+
+            scene.add(shipGroup);
+            return shipGroup;
+        }
+
+
+        // --- মূল ৩ডি অবজেক্ট সেটআপ ---
+
+        // ১. সূর্য তৈরি করা
+        const sunGeometry = new THREE.SphereGeometry(12, 32, 32); 
+        const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffaa00 }); 
+        const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+        scene.add(sun);
+        pointLight.position.copy(sun.position);
+
+        // ২. গ্রহ এবং কক্ষপথ তৈরি করা
+        planetData.forEach(data => {
+            const planetGroup = new THREE.Object3D();
+            planetGroup.name = data.name + "Group";
+            scene.add(planetGroup);
+            planetGroups.push(planetGroup);
+
+            const planetGeometry = new THREE.SphereGeometry(data.size, 32, 32);
+            const planetMaterial = new THREE.MeshLambertMaterial({ color: data.color }); 
+            const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+            planet.position.x = data.distance; 
+            planet.name = data.name;
+
+            planetGroup.add(planet);
+            planets.push(planet);
+
+            // গ্রহের নাম যোগ করা (Label)
+            const label = createPlanetLabel(data.name);
+            label.position.set(data.distance, data.size * 1.5, 0); 
+            planetGroup.add(label);
+
+            if (data.ring) {
+                const ringGeometry = new THREE.RingGeometry(data.ring.innerRadius, data.ring.outerRadius, 64);
+                const ringMaterial = new THREE.MeshBasicMaterial({ color: data.ring.color, side: THREE.DoubleSide });
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = Math.PI / 2; 
+                ring.position.copy(planet.position);
+                planetGroup.add(ring);
+            }
+
+            // কক্ষপথের লাইন
+            const material = new THREE.LineBasicMaterial({ color: 0x333333 });
+            const points = [];
+            const segments = 128; 
+            for (let i = 0; i <= segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                const x = data.distance * Math.cos(angle);
+                const z = data.distance * Math.sin(angle);
+                points.push(new THREE.Vector3(x, 0, z));
+            }
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const orbit = new THREE.Line(geometry, material);
+            scene.add(orbit);
+        });
+        
+        // ৩. স্থির তারা যোগ করা
+        addStars();
+        
+        // ৪. স্পেস শিপ যোগ করা
+        spaceShip = createSpaceship();
+        
+        // ৫. পৃথিবী গ্রুপ খুঁজে চাঁদ যোগ করা
+        earthGroup = planetGroups.find(g => g.name.includes("পৃথিবী (Earth)"));
+        if (earthGroup) {
+            // ১. চাঁদের কক্ষপথের জন্য গ্রুপ তৈরি
+            const moonOrbitGroup = new THREE.Object3D();
+            moonOrbitGroup.name = "MoonOrbitGroup";
+            
+            // ২. চাঁদ তৈরি
+            const moonGeometry = new THREE.SphereGeometry(moonData.size, 16, 16);
+            const moonMaterial = new THREE.MeshLambertMaterial({ color: moonData.color });
+            const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+            moon.name = "চাঁদ (Moon)";
+            
+            // ৩. চাঁদকে কক্ষপথ গ্রুপে স্থাপন
+            moon.position.x = moonData.distance; 
+            moonOrbitGroup.add(moon);
+            
+            // ৪. কক্ষপথ গ্রুপটিকে পৃথিবী গ্রুপে যোগ করা (যাতে পৃথিবীর সাথে ঘোরে)
+            earthGroup.add(moonOrbitGroup);
+            
+            // ৫. অ্যানিমেশনের জন্য রেফারেন্স সংরক্ষণ
+            moonOrbitGroup.userData.speed = moonData.speed;
+            moonGroup = moonOrbitGroup;
+            
+            // চাঁদের কক্ষপথের লাইন তৈরি করা (পৃথিবীর চারপাশে)
+            const material = new THREE.LineBasicMaterial({ color: 0x444444 });
+            const points = [];
+            const segments = 64; 
+            for (let i = 0; i <= segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                const x = moonData.distance * Math.cos(angle);
+                const z = moonData.distance * Math.sin(angle);
+                points.push(new THREE.Vector3(x, 0, z));
+            }
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const orbit = new THREE.Line(geometry, material);
+            moonOrbitGroup.add(orbit); 
+        }
+        
+        // গতির দিকে ঘোরানোর জন্য সহায়ক ভেক্টর
+        const tempNextPosition = new THREE.Vector3();
+
+
+        // অ্যানিমেশন লুপ
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            // সূর্যকে ঘোরানো
+            sun.rotation.y += 0.001 * simulationSpeed;
+
+            // গ্রহগুলির ঘূর্ণন এবং পরিক্রমণ
+            planetGroups.forEach((group, index) => {
+                const data = planetData[index];
+                const planet = group.children.find(c => c.type === 'Mesh' && c.name.includes(data.name));
+                
+                // সূর্যের চারপাশে ঘোরানো (পরিক্রমণ/Revolution)
+                group.rotation.y += data.speed * 0.05 * simulationSpeed; 
+
+                // নিজের অক্ষে ঘোরানো (আবর্তন/Rotation)
+                if (planet) {
+                    planet.rotation.y += data.speed * 0.5 * simulationSpeed; 
+                }
+            });
+            
+            // চাঁদের আবর্তন (পৃথিবীর চারপাশে)
+            if (moonGroup) {
+                // চাঁদ তার অরবিট গ্রুপ সহ পৃথিবীর চারপাশে ঘুরছে
+                moonGroup.rotation.y += moonGroup.userData.speed * 0.05 * simulationSpeed; 
+                
+                // চাঁদকেও নিজের অক্ষে ঘোরানো
+                const moon = moonGroup.children.find(c => c.name === "চাঁদ (Moon)");
+                if (moon) {
+                    moon.rotation.y += 0.01 * simulationSpeed;
+                }
+            }
+            
+            // স্পেস শিপ এর গতিবিধি (একটি বড় ডিম্বাকার পথে)
+            if (spaceShip) {
+                // সময় বৃদ্ধি
+                shipTime += 0.002 * simulationSpeed;
+                
+                // বর্তমান অবস্থান
+                const x_current = 300 * Math.cos(shipTime);
+                const z_current = 180 * Math.sin(shipTime);
+                const y = 20; 
+                const currentPosition = new THREE.Vector3(x_current, y, z_current);
+                
+                // পরের অবস্থান (মুখ ঘোরানোর জন্য)
+                const futureTime = shipTime + 0.01; // সামান্য এগিয়ে
+                const next_x = 300 * Math.cos(futureTime);
+                const next_z = 180 * Math.sin(futureTime);
+                tempNextPosition.set(next_x, y, next_z);
+
+                // বর্তমান অবস্থানে নিয়ে যাওয়া
+                spaceShip.position.copy(currentPosition);
+                
+                // পরের অবস্থানটির দিকে মুখ ঘোরানো (lookAt)
+                spaceShip.lookAt(tempNextPosition);
+                
+                // সামান্য ঘুরিয়ে দেওয়া যাতে সেটি XZ প্লেনে ফ্ল্যাট থাকে (যদি প্রয়োজন হয়)
+                // যেহেতু মডেলটি Z-forward হিসাবে তৈরি, এটি আর প্রয়োজন নেই।
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // কন্ট্রোল প্যানেলের ফাংশনালিটি
+        function setupControls() {
+            const speedSlider = document.getElementById('speed-slider');
+            const speedValueDisplay = document.getElementById('speed-value');
+            
+            speedSlider.addEventListener('input', (event) => {
+                simulationSpeed = parseFloat(event.target.value);
+                speedValueDisplay.textContent = simulationSpeed.toFixed(1) + 'x';
+            });
+        }
+
+
+        window.onload = function () {
+            setupControls();
+            animate();
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        // JavaScript কোড শেষ
+    </script>
+</body>
+</html>
